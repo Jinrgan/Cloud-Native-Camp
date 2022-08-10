@@ -1,0 +1,59 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+MASTER1_IP="192.168.172.129"
+WORKER1_IP="192.168.172.130"
+WORKER2_IP="192.168.172.131"
+
+Vagrant.require_version ">= 1.6.0"
+
+boxes = [
+  {
+      :name => "master",
+      :eth1 => MASTER1_IP,
+      :mem => "4096",
+      :cpu => "2" # at least 2
+  },
+  {
+      :name => "worker1",
+      :eth1 => WORKER1_IP,
+      :mem => "2048",
+      :cpu => "2"
+  },
+  {
+      :name => "worker2",
+      :eth1 => WORKER2_IP,
+      :mem => "2048",
+      :cpu => "2"
+  }
+]
+
+Vagrant.configure(2) do |config|
+  if Vagrant.has_plugin?("vagrant-vbguest")
+    config.vbguest.auto_update = false
+  end
+
+  config.vm.provision "shell", env: {"MASTER1_IP" => MASTER1_IP, "WORKER1_IP" => WORKER1_IP, "WORKER2_IP" => WORKER2_IP}, inline: <<-SHELL
+      echo "$MASTER1_IP master" >> /etc/hosts
+      echo "$WORKER1_IP worker1" >> /etc/hosts
+      echo "$WORKER2_IP worker2" >> /etc/hosts
+  SHELL
+
+  config.vbguest.iso_path = "https://mirrors.tuna.tsinghua.edu.cn/virtualbox/%{version}/VBoxGuestAdditions_%{version}.iso"
+  config.vm.box = "centos/7"
+  config.vm.box_url = "https://mirrors.ustc.edu.cn/centos-cloud/centos/7/vagrant/x86_64/images/CentOS-7.box"
+  boxes.each do |opts|
+    config.vm.define opts[:name] do |config|
+      config.vm.hostname = opts[:name]
+      config.vm.provider "vmware_fusion" do |v|
+        v.vmx["memsize"] = opts[:mem]
+        v.vmx["numvcpus"] = opts[:cpu]
+      end
+      config.vm.provider "virtualbox" do |v|
+        v.customize ["modifyvm", :id, "--memory", opts[:mem]]
+        v.customize ["modifyvm", :id, "--cpus", opts[:cpu]]
+      end
+      config.vm.network :private_network, ip: opts[:eth1]
+    end
+  end
+  config.vm.provision "shell", privileged: true, path: "./setup.sh"
+end
